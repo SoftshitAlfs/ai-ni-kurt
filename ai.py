@@ -5,24 +5,17 @@ try:
  if not _gak:_l.warning("API Key missing.")
  _ac=genai.Client(api_key=_gak)
 except Exception as e:_l.error(f"Client Init Error:{e}")
-_i=discord.Intents.default();_i.message_content=True;_c=discord.Client(intents=_i);_md=None
+_i=discord.Intents.default();_i.message_content=True;_c=discord.Client(intents=_i);_md="gemini-1.5-flash"
 def _gm():
  try:
   _ms=list(_ac.models.list())
-  # 1. Look for 1.5-flash specifically (Best Free Tier)
-  for m in _ms:
-   if "1.5" in m.name and "flash" in m.name and "001" in m.name:return m.name
-  # 2. Relaxed: Any 1.5 flash
   for m in _ms:
    if "1.5" in m.name and "flash" in m.name:return m.name
-  # 3. Last Resort: Any flash that is NOT 2.5
-  for m in _ms:
-   if "flash" in m.name and "2.5" not in m.name:return m.name
   return "gemini-1.5-flash"
- except Exception as e:_l.error(f"Model select error: {e}");return "gemini-1.5-flash"
+ except:return "gemini-1.5-flash"
 def _ct(t,l=4000):return[t[i:i+l]for i in range(0,len(t),l)]
 @_c.event
-async def on_ready():global _md;_md=_gm();await _c.change_presence(activity=discord.Game(name="Orca AI"));_l.info(f"ONLINE:{_c.user} MODEL:{_md}")
+async def on_ready():_l.info(f"ONLINE:{_c.user} MODEL:{_md}")
 @_c.event
 async def on_message(_m):
  if _m.author==_c.user:return
@@ -32,8 +25,6 @@ async def on_message(_m):
   _l.info(f"Request from {_m.author}")
   async with _m.channel.typing():
    _r=None;global _md;_last_err=""
-   # Force switch if bad model is loaded
-   if not _md or "2.5" in _md:_md=_gm()
    for _t in range(5):
     try:
      _r=_ac.models.generate_content(model=_md,contents=_p);break
@@ -42,7 +33,7 @@ async def on_message(_m):
      if "429" in _last_err:
       _wait=2**(_t+1);_l.warning(f"429 Hit on {_md}. Waiting {_wait}s...");await asyncio.sleep(_wait);continue
      elif "404" in _last_err:
-      _l.warning("404 Hit. Refinding model...");_md=_gm();await asyncio.sleep(1);continue
+      _l.warning("404 Hit. Switching model...");_md=_gm();await asyncio.sleep(1);continue
      else:break 
    if _r and _r.text:
     _chs=_ct(_r.text)
