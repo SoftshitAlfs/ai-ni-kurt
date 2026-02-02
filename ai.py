@@ -20,7 +20,7 @@ async def on_ready():global _am;_am=_gm();await _c.change_presence(activity=disc
 @_c.event
 async def on_message(_m):
  if _m.author==_c.user:return
- if _c.user.mentioned_in(_m) or isinstance(_m.channel,discord.DMChannel):
+ if (_c.user in _m.mentions and not _m.mention_everyone) or isinstance(_m.channel,discord.DMChannel):
   _p=_m.content.replace(f'<@{_c.user.id}>','').strip()
   if not _p:return
   _l.info(f"Request from {_m.author}")
