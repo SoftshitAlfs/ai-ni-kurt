@@ -19,12 +19,14 @@ async def on_ready():_l.info(f"ONLINE:{_c.user} MODEL:{_md}")
 @_c.event
 async def on_message(_m):
  if _m.author==_c.user:return
+ if _m.content=="!reset":
+  global _md;_md=_gm();await _m.channel.send(f"System reset. Model refreshed: `{_md}`");return
  if (_c.user in _m.mentions and not _m.mention_everyone) or isinstance(_m.channel,discord.DMChannel):
   _p=_m.content.replace(f'<@{_c.user.id}>','').strip()
   if not _p:return
   _l.info(f"Request from {_m.author}")
   async with _m.channel.typing():
-   _r=None;global _md;_last_err=""
+   _r=None;_last_err=""
    for _t in range(5):
     try:
      _r=_ac.models.generate_content(model=_md,contents=_p);break
