@@ -5,10 +5,17 @@ try:
  if not _gak:_l.warning("API Key missing.")
  _ac=genai.Client(api_key=_gak)
 except Exception as e:_l.error(f"Client Init Error:{e}")
-_i=discord.Intents.default();_i.message_content=True;_c=discord.Client(intents=_i);_md="gemini-1.5-flash"
+_i=discord.Intents.default();_i.message_content=True;_c=discord.Client(intents=_i);_md=None
+def _gm():
+ try:
+  for m in _ac.models.list():
+   n=getattr(m,'name',str(m))
+   if "gemini-1.5-flash" in n:return n
+  return "gemini-1.5-flash"
+ except:return "gemini-1.5-flash"
 def _ct(t,l=4000):return[t[i:i+l]for i in range(0,len(t),l)]
 @_c.event
-async def on_ready():await _c.change_presence(activity=discord.Game(name="Orca AI"));_l.info(f"ONLINE:{_c.user}")
+async def on_ready():global _md;_md=_gm();await _c.change_presence(activity=discord.Game(name="Orca AI"));_l.info(f"ONLINE:{_c.user} MODEL:{_md}")
 @_c.event
 async def on_message(_m):
  if _m.author==_c.user:return
@@ -17,7 +24,8 @@ async def on_message(_m):
   if not _p:return
   _l.info(f"Request from {_m.author}")
   async with _m.channel.typing():
-   _r=None;
+   _r=None;global _md
+   if not _md:_md=_gm()
    for _ in range(3):
     try:
      _r=_ac.models.generate_content(model=_md,contents=_p);break
@@ -36,5 +44,5 @@ async def on_message(_m):
       _e.add_field(name="User",value=_m.author.display_name,inline=True)
      _e.set_footer(text="Orca AI • Greets softshit holy");await _m.channel.send(embed=_e)
     _l.info("Response delivered.")
-   else:await _m.channel.send("System Busy or Empty Response.")
+   else:await _m.channel.send("System Busy.")
 if __name__=="__main__":_c.run(_dt)
