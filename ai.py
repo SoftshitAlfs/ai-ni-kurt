@@ -9,11 +9,16 @@ _i=discord.Intents.default();_i.message_content=True;_c=discord.Client(intents=_
 def _gm():
  try:
   _ms=list(_ac.models.list())
+  # 1. Look for 1.5-flash specifically (Best Free Tier)
+  for m in _ms:
+   if "1.5" in m.name and "flash" in m.name and "001" in m.name:return m.name
+  # 2. Relaxed: Any 1.5 flash
   for m in _ms:
    if "1.5" in m.name and "flash" in m.name:return m.name
+  # 3. Last Resort: Any flash that is NOT 2.5
   for m in _ms:
-   if "flash" in m.name:return m.name
-  return _ms[0].name if _ms else "gemini-1.5-flash"
+   if "flash" in m.name and "2.5" not in m.name:return m.name
+  return "gemini-1.5-flash"
  except Exception as e:_l.error(f"Model select error: {e}");return "gemini-1.5-flash"
 def _ct(t,l=4000):return[t[i:i+l]for i in range(0,len(t),l)]
 @_c.event
@@ -26,15 +31,19 @@ async def on_message(_m):
   if not _p:return
   _l.info(f"Request from {_m.author}")
   async with _m.channel.typing():
-   _r=None;global _md
-   if not _md:_md=_gm()
-   for _ in range(3):
+   _r=None;global _md;_last_err=""
+   # Force switch if bad model is loaded
+   if not _md or "2.5" in _md:_md=_gm()
+   for _t in range(5):
     try:
      _r=_ac.models.generate_content(model=_md,contents=_p);break
     except Exception as e:
-     if "429" in str(e):await asyncio.sleep(4);continue
-     elif "404" in str(e):_md=_gm();continue
-     else:_ee=discord.Embed(title="Error",description=f"```\n{str(e)}\n```",color=0xED4245);await _m.channel.send(embed=_ee);return
+     _last_err=str(e)
+     if "429" in _last_err:
+      _wait=2**(_t+1);_l.warning(f"429 Hit on {_md}. Waiting {_wait}s...");await asyncio.sleep(_wait);continue
+     elif "404" in _last_err:
+      _l.warning("404 Hit. Refinding model...");_md=_gm();await asyncio.sleep(1);continue
+     else:break 
    if _r and _r.text:
     _chs=_ct(_r.text)
     for i,_ch in enumerate(_chs):
@@ -46,5 +55,9 @@ async def on_message(_m):
       _e.add_field(name="User",value=_m.author.display_name,inline=True)
      _e.set_footer(text="Orca AI • Greets softshit holy");await _m.channel.send(embed=_e)
     _l.info("Response delivered.")
-   else:await _m.channel.send("System Busy.")
+   else:
+    _msg="System Busy."
+    if "429" in _last_err:_msg="Rate Limit Hit (Wait 30s)."
+    elif "404" in _last_err:_msg="Model Config Error."
+    await _m.channel.send(_msg)
 if __name__=="__main__":_c.run(_dt)
