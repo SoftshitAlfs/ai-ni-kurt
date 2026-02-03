@@ -1,3 +1,5 @@
-discord.py 
+discord.py 3.12.8
+
 google-genai 
+
 python-dotenv
