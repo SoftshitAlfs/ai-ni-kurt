@@ -206,31 +206,6 @@ async def scanserver(ctx, limit: int = 100):
     else:
         await ctx.send("No suspicious links found")
 
-class ChoiceSelect(Select):
-    def __init__(self):
-        self.message_map = {
-            "rtb": "TO ALL ACTIVE MEMBERS CONNECT TO RADIO AND RTB",
-            "meetup": "REQUESTING MEET UP AT DESIGNATED LOCATION",
-            "issues": "REQUESTING MEETUP TO DISCUSS ISSUES",
-            "gwar": "ONGOING GANG WAR DECLARATION"
-        }
-        options = [
-            discord.SelectOption(label="RTB", value="rtb"),
-            discord.SelectOption(label="Meetup", value="meetup"),
-            discord.SelectOption(label="Issues", value="issues"),
-            discord.SelectOption(label="Gang War", value="gwar")
-        ]
-        super().__init__(placeholder="Choose message", options=options)
-
-    async def callback(self, interaction: discord.Interaction):
-        await interaction.response.send_message(self.message_map[self.values[0]], ephemeral=True)
-
-
-@bot.command()
-async def lexus(ctx):
-    view = View()
-    view.add_item(LexusGpackSelect())
-    await ctx.send("Choose Lexus pack", view=view)
 
 class HelpSelect(Select):
     def __init__(self, ctx):
@@ -238,7 +213,6 @@ class HelpSelect(Select):
         self.categories = {
             "Moderation": ["whitelist", "scanserver"],
             "Scanning": ["scan", "ping"],
-         
         }
         options = [discord.SelectOption(label=k, value=k) for k in self.categories.keys()]
         super().__init__(placeholder="Select category", options=options)
