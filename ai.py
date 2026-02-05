@@ -5,7 +5,7 @@ import logging
 import requests
 import discord
 from discord.ext import commands
-from discord.ui import Select, View, Button
+from discord.ui import Select, View
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -21,7 +21,7 @@ intents.members = True
 intents.guilds = True
 intents.message_content = True
 
-bot = commands.Bot(command_prefix="!", intents=intents)
+bot = commands.Bot(command_prefix="!", intents=intents, help_command=None)
 
 invites = {}
 log_channels = {}
@@ -206,13 +206,13 @@ async def scanserver(ctx, limit: int = 100):
     else:
         await ctx.send("No suspicious links found")
 
-
 class HelpSelect(Select):
     def __init__(self, ctx):
         self.ctx = ctx
         self.categories = {
             "Moderation": ["whitelist", "scanserver"],
             "Scanning": ["scan", "ping"],
+            "Templates": ["template", "lexus"]
         }
         options = [discord.SelectOption(label=k, value=k) for k in self.categories.keys()]
         super().__init__(placeholder="Select category", options=options)
@@ -230,6 +230,54 @@ async def help(ctx):
     view.add_item(HelpSelect(ctx))
     embed = discord.Embed(title="Help Menu", description="Select a category to view commands", color=discord.Color.blue())
     await ctx.send(embed=embed, view=view)
+
+class ChoiceSelect(Select):
+    def __init__(self):
+        self.message_map = {
+            "rtb": "TO ALL ACTIVE MEMBERS CONNECT TO RADIO AND RTB",
+            "meetup": "REQUESTING MEET UP AT DESIGNATED LOCATION",
+            "issues": "REQUESTING MEETUP TO DISCUSS ISSUES",
+            "gwar": "ONGOING GANG WAR DECLARATION"
+        }
+        options = [
+            discord.SelectOption(label="RTB", value="rtb"),
+            discord.SelectOption(label="Meetup", value="meetup"),
+            discord.SelectOption(label="Issues", value="issues"),
+            discord.SelectOption(label="Gang War", value="gwar")
+        ]
+        super().__init__(placeholder="Choose message", options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.send_message(self.message_map[self.values[0]], ephemeral=True)
+
+@bot.command()
+async def template(ctx):
+    view = View()
+    view.add_item(ChoiceSelect())
+    await ctx.send("Select template", view=view)
+
+class LexusGpackSelect(Select):
+    def __init__(self):
+        self.message_map = {
+            "v7": "LEXUS V7 LINK",
+            "v8": "LEXUS V8 LINK",
+            "v10": "LEXUS V10 LINK"
+        }
+        options = [
+            discord.SelectOption(label="V7", value="v7"),
+            discord.SelectOption(label="V8", value="v8"),
+            discord.SelectOption(label="V10", value="v10")
+        ]
+        super().__init__(placeholder="Choose pack", options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.send_message(self.message_map[self.values[0]], ephemeral=True)
+
+@bot.command()
+async def lexus(ctx):
+    view = View()
+    view.add_item(LexusGpackSelect())
+    await ctx.send("Choose Lexus pack", view=view)
 
 if not TOKEN:
     raise RuntimeError("DISCORD_TOKEN missing")
