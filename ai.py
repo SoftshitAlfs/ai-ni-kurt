@@ -112,10 +112,24 @@ async def scan(ctx, url: str):
     if not VIRUSTOTAL_API_KEY:
         await ctx.send("VirusTotal key missing")
         return
-    msg = await ctx.send("Scanning URL")
-    stats, results = await query_virustotal(url)
+
+    msg = await ctx.send("Scanning URL: ░░░░░░░░░░")
+
+    async def animate():
+        bars = ["░░░░░░░░░░","█░░░░░░░░░","██░░░░░░░░","███░░░░░░░","████░░░░░░",
+                "█████░░░░░","██████░░░░","███████░░░","████████░░","█████████░","██████████"]
+        for b in bars:
+            await msg.edit(content=f"Scanning URL: {b}")
+            await asyncio.sleep(0.5)
+
+    anim_task = asyncio.create_task(animate())
+    try:
+        stats, results = await query_virustotal(url)
+    finally:
+        anim_task.cancel()
+
     if not stats:
-        await msg.edit(content="Scan failed")
+        await msg.edit(content="Scan failed or timed out")
         return
 
     total = sum(stats.values())
@@ -134,9 +148,10 @@ async def scan(ctx, url: str):
         category = data.get("category", "unknown").capitalize()
         result = data.get("result", "Clean")
         embed.add_field(name=engine, value=f"Category: {category}\nResult: {result}", inline=True)
-    
+
     embed.set_footer(text=f"Total Engines Scanned: {len(results)}")
     await msg.edit(content=None, embed=embed)
+
 
 @bot.command()
 async def ping(ctx):
@@ -401,4 +416,5 @@ if not TOKEN:
     raise RuntimeError("DISCORD_TOKEN missing")
 
 bot.run(TOKEN)
+
 
