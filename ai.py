@@ -2,14 +2,13 @@ import os
 import re
 import asyncio
 import logging
-import requests
+import aiohttp
 import discord
 from discord.ext import commands
-from discord.ui import Select, View
+from discord.ui import Select, View, Button
 from dotenv import load_dotenv
 
 load_dotenv()
-
 TOKEN = os.getenv("DISCORD_TOKEN")
 VIRUSTOTAL_API_KEY = os.getenv("VIRUSTOTAL_API_KEY")
 
@@ -18,14 +17,12 @@ logger = logging.getLogger("orca")
 
 intents = discord.Intents.default()
 intents.members = True
-intents.guilds = True
 intents.message_content = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 invites = {}
 log_channels = {}
-quote_channels = {}
 bot_whitelist = []
 
 suspicious_patterns = [
@@ -92,19 +89,39 @@ async def on_message(message):
             break
     await bot.process_commands(message)
 
-async def query_virustotal(url):
+async def vt_scan_url(session, url):
     headers = {"x-apikey": VIRUSTOTAL_API_KEY}
-    submit = requests.post("https://www.virustotal.com/api/v3/urls", headers=headers, data={"url": url})
-    if submit.status_code not in (200, 201):
-        return None, None
-    analysis_id = submit.json()["data"]["id"]
+    async with session.post("https://www.virustotal.com/api/v3/urls", headers=headers, data={"url": url}) as resp:
+        if resp.status not in (200, 201):
+            return None, None
+        data = await resp.json()
+    analysis_id = data["data"]["id"]
     await asyncio.sleep(10)
-    report = requests.get(f"https://www.virustotal.com/api/v3/analyses/{analysis_id}", headers=headers)
-    if report.status_code != 200:
-        return None, None
-    stats = report.json()["data"]["attributes"]["stats"]
-    results = report.json()["data"]["attributes"]["results"]
+    async with session.get(f"https://www.virustotal.com/api/v3/analyses/{analysis_id}", headers=headers) as r:
+        if r.status != 200:
+            return None, None
+        report = await r.json()
+    stats = report["data"]["attributes"]["stats"]
+    results = report["data"]["attributes"]["results"]
     return stats, results
+
+class VTPageView(View):
+    def __init__(self, embed_pages):
+        super().__init__()
+        self.pages = embed_pages
+        self.current = 0
+
+    @discord.ui.button(label="Previous", style=discord.ButtonStyle.gray)
+    async def prev(self, interaction: discord.Interaction, button: Button):
+        if self.current > 0:
+            self.current -= 1
+            await interaction.response.edit_message(embed=self.pages[self.current], view=self)
+
+    @discord.ui.button(label="Next", style=discord.ButtonStyle.gray)
+    async def next(self, interaction: discord.Interaction, button: Button):
+        if self.current < len(self.pages)-1:
+            self.current += 1
+            await interaction.response.edit_message(embed=self.pages[self.current], view=self)
 
 @bot.command()
 async def scan(ctx, url: str):
@@ -115,64 +132,54 @@ async def scan(ctx, url: str):
         await ctx.send("VirusTotal key missing")
         return
 
-    msg = await ctx.send("Scanning ░░░░░░░░░░")
+    async with aiohttp.ClientSession() as session:
+        msg = await ctx.send("Scanning ░░░░░░░░░░")
+        await ctx.trigger_typing()
 
-    async def animate():
-        bars = [
-            "░░░░░░░░░░","█░░░░░░░░░","██░░░░░░░░","███░░░░░░░",
-            "████░░░░░░","█████░░░░░","██████░░░░",
-            "███████░░░","████████░░","█████████░","██████████"
-        ]
-        while True:
-            for b in bars:
-                await msg.edit(content=f"Scanning {b}")
-                await asyncio.sleep(0.4)
+        stats, results = await vt_scan_url(session, url)
+        if not stats:
+            await msg.edit(content="Scan failed")
+            return
 
-    anim = asyncio.create_task(animate())
-    stats, results = await query_virustotal(url)
-    anim.cancel()
+        total = sum(stats.values())
+        def bar(value):
+            filled = int((value / total) * 10) if total > 0 else 0
+            return "█"*filled + "░"*(10-filled)
 
-    if not stats:
-        await msg.edit(content="Scan failed")
-        return
+        embed_main = discord.Embed(title="VirusTotal Scan Result", color=discord.Color.blue())
+        embed_main.add_field(name="Malicious", value=f"{stats.get('malicious',0)} {bar(stats.get('malicious',0))}", inline=False)
+        embed_main.add_field(name="Suspicious", value=f"{stats.get('suspicious',0)} {bar(stats.get('suspicious',0))}", inline=False)
+        embed_main.add_field(name="Undetected", value=f"{stats.get('undetected',0)} {bar(stats.get('undetected',0))}", inline=False)
+        embed_main.add_field(name="Timeout", value=f"{stats.get('timeout',0)} {bar(stats.get('timeout',0))}", inline=False)
 
-    total = sum(stats.values())
-    def bar(value):
-        filled = int((value / total) * 10) if total > 0 else 0
-        return "█" * filled + "░" * (10 - filled)
+        # Split results into pages of 20 fields each
+        embeds = []
+        engines = list(results.items())
+        while engines:
+            embed = discord.Embed(color=discord.Color.orange())
+            for _ in range(20):
+                if not engines:
+                    break
+                engine, data = engines.pop(0)
+                category = data.get("category","unknown")
+                result = data.get("result","Clean")
+                color = discord.Color.green() if category in ["undetected","harmless"] else discord.Color.red()
+                embed.add_field(name=engine, value=f"Category: {category}\nResult: {result}", inline=True)
+            embeds.append(embed)
 
-    embed = discord.Embed(title="VirusTotal Scan Result", color=discord.Color.blue())
-    embed.add_field(name="Malicious", value=f"{stats.get('malicious',0)} {bar(stats.get('malicious',0))}", inline=False)
-    embed.add_field(name="Suspicious", value=f"{stats.get('suspicious',0)} {bar(stats.get('suspicious',0))}", inline=False)
-    embed.add_field(name="Undetected", value=f"{stats.get('undetected',0)} {bar(stats.get('undetected',0))}", inline=False)
-    embed.add_field(name="Timeout", value=f"{stats.get('timeout',0)} {bar(stats.get('timeout',0))}", inline=False)
-
-    engine_count = 0
-    max_fields = 20
-    for engine, data in results.items():
-        if engine_count >= max_fields:
-            break
-        embed.add_field(
-            name=engine,
-            value=f"Category: {data.get('category','unknown')}\nResult: {data.get('result','Clean')}",
-            inline=True
-        )
-        engine_count += 1
-
-    remaining = len(results) - max_fields
-    if remaining > 0:
-        embed.add_field(name="And more...", value=f"{remaining} engines not shown", inline=False)
-
-    embed.set_footer(text=f"Total Engines Scanned: {len(results)}")
-    await msg.edit(content=None, embed=embed)
+        if embeds:
+            view = VTPageView(embeds)
+            await msg.edit(content=None, embed=embeds[0], view=view)
+        else:
+            await msg.edit(content=None, embed=embed_main)
 
 @bot.command()
 async def ping(ctx):
-    await ctx.send(f"Pong {round(bot.latency * 1000)}ms")
+    await ctx.send(f"Pong {round(bot.latency*1000)}ms")
 
 @bot.command()
 @commands.has_permissions(administrator=True)
-async def whitelist(ctx, action: str, user: discord.User = None):
+async def whitelist(ctx, action: str, user: discord.User=None):
     action = action.lower()
     if action == "add" and user:
         if user.id not in bot_whitelist:
@@ -196,7 +203,7 @@ async def whitelist(ctx, action: str, user: discord.User = None):
 
 @bot.command()
 @commands.has_permissions(administrator=True)
-async def scanserver(ctx, limit: int = 100):
+async def scanserver(ctx, limit: int=100):
     found = []
     for channel in ctx.guild.text_channels:
         async for msg in channel.history(limit=limit):
@@ -207,55 +214,9 @@ async def scanserver(ctx, limit: int = 100):
     else:
         await ctx.send("No suspicious links found")
 
-class ChoiceSelect(Select):
-    def __init__(self):
-        self.message_map = {
-            "rtb": "TO ALL ACTIVE MEMBERS CONNECT TO RADIO AND RTB",
-            "meetup": "REQUESTING MEET UP AT DESIGNATED LOCATION",
-            "issues": "REQUESTING MEETUP TO DISCUSS ISSUES",
-            "gwar": "ONGOING GANG WAR DECLARATION"
-        }
-        options = [
-            discord.SelectOption(label="RTB", value="rtb"),
-            discord.SelectOption(label="Meetup", value="meetup"),
-            discord.SelectOption(label="Issues", value="issues"),
-            discord.SelectOption(label="Gang War", value="gwar")
-        ]
-        super().__init__(placeholder="Choose message", options=options)
 
-    async def callback(self, interaction: discord.Interaction):
-        await interaction.response.send_message(self.message_map[self.values[0]], ephemeral=True)
-
-@bot.command()
-async def template(ctx):
-    view = View()
-    view.add_item(ChoiceSelect())
-    await ctx.send("Select template", view=view)
-
-class LexusGpackSelect(Select):
-    def __init__(self):
-        self.message_map = {
-            "v7": "LEXUS V7 LINK",
-            "v8": "LEXUS V8 LINK",
-            "v10": "LEXUS V10 LINK"
-        }
-        options = [
-            discord.SelectOption(label="V7", value="v7"),
-            discord.SelectOption(label="V8", value="v8"),
-            discord.SelectOption(label="V10", value="v10")
-        ]
-        super().__init__(placeholder="Choose pack", options=options)
-
-    async def callback(self, interaction: discord.Interaction):
-        await interaction.response.send_message(self.message_map[self.values[0]], ephemeral=True)
-
-@bot.command()
-async def lexus(ctx):
-    view = View()
-    view.add_item(LexusGpackSelect())
-    await ctx.send("Choose Lexus pack", view=view)
 
 if not TOKEN:
     raise RuntimeError("DISCORD_TOKEN missing")
-
 bot.run(TOKEN)
+s
