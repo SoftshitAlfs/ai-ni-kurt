@@ -762,6 +762,8 @@ class LexusGpackSelect(Select):
 
             "v8": "LEXUS V8 https://cdn.discordapp.com/attachments/1310176656169898015/1341159143012302960/Lexus_Bundle_V10.rar?ex=6864fb89&is=6863aa09&hm=e520e52f2d26b847f2397e6d7749b4b56b204c1c65754da6b6aa16eb90fa8d96&",
 
-            "v10": "LEXUS V10 https://cdn.discordapp.com/attachments/1333750798521208864/1333750800614428735/YVL_V3.rar?ex=686465fa&is=6863147a&hm=c98ee2e27761a7dd3f3d2d3c2b748349054a786c3aa5e40a7a7dd54a2d4c627d&",
+            "v10": "LEXUS V10 https://cdn.discordapp.com/attachments/1333750798521208864/1333750800614428735/YVL_V3.rar?ex=686465fa&is=6863147a&hm=c98ee2e27761a7dd3f3d2d3c2b748349054a786c3aa5e40a7a7dd54a2d4c627d&",}
+     
 
             
+
